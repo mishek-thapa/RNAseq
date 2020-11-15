@@ -1,0 +1,80 @@
+#Installation of RNAseq Programs 
+
+# Quality control.
+# Download and install FastQC into the src directory.
+cd ~/src
+curl -O http://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.11.2.zip
+
+# Linux people: do an: sudo apt-get install unzip
+unzip fastqc_v0.11.2.zip
+cd FastQC
+ls -l
+
+# There is an error in the distribution. The executable flag is not set.
+chmod +x fastqc
+
+# We want fastqc to be globally available. We have two ways to do this. We could
+# add the path to the library to the main PATH (as before), but that gets old when you
+# have to add every single program and reload the PATH.
+# Alternatively we could add one directory say ~/bin then create links (shortcuts)
+# in this directoy to the programs that we want to be available globally.
+
+# Create the ~/bin directory
+mkdir -p ~/bin
+
+# Add the ~/bin folder into the PATH
+
+# On a Mac:
+echo 'export PATH=~/bin:$PATH' >> ~/.profile
+# to apply to the current shell not just future ones:
+source ~/.profile
+
+# Under Linux do the following:
+# echo 'export PATH=~/bin:$PATH' >> ~/.bashrc
+# source ~/.bashrc
+
+# Link the fastqc under an "shortcut" in ~/bin
+ln -s ~/src/FastQC/fastqc ~/bin/fastqc
+
+# Test that the tool works.
+# Linux people may need to install java.
+# See the linux install guide: http://www.personal.psu.edu/iua1/courses/code-repository-2014.html#chromebook
+fastqc -h
+
+# Run a fastqc report on all files in the directory.
+cd ~/edu/lec7
+fastqc *.fastq
+
+
+# Install trimmomatic
+cd ~/src
+curl -O http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/Trimmomatic-0.39.zip
+unzip Trimmomatic-0.329.zip
+cd Trimmomatic-0.39
+
+# Alas not much is there. You got to hit the manual at:
+# http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/TrimmomaticManual_V0.32.pdf
+# It has a really user unfriendly way to run it. Thanks a bunch!
+java -jar trimmomatic-0.39.jar
+
+# Lets make a script that lauches that for us.
+# Create a script with Komodo or from the command line that contains the following
+# shown below :
+
+# You can also do it from the command line
+echo '#!/bin/bash' > ~/bin/trimmomatic
+echo 'java -jar ~/src/Trimmomatic-0.39/trimmomatic-0.39.jar $@' >> ~/bin/trimmomatic
+chmod +x ~/bin/trimmomatic
+
+# Look Ma! It works.
+trimmomatic
+
+
+
+# STAR Installation is more difficult because I could not find a binary built 
+# here’s there source code that has to be compiled: https://github.com/alexdobin/STAR
+# I found it really annoying to install and had to mess around before I got it to work
+
+
+
+
