@@ -17,23 +17,47 @@ find /mnt/Alma/Data/RNAseq/flowcell/ -name '*.fastq.gz' | awk '{printf("fastqc \
 # Trimmomatic uses a different set of paramters and philosophy. Parameters need to be space separated words
 # where the sub-parameters  are separated by a colon. Basically they invented their own parameter formats.
 #Really DUMB
+
+
+
 trimmomatic SE -phred33 ~/Desktop/rnaseq/data/SRR519926_1.fastq ~/Desktop/rnaseq/results/trimmomatic_1.fq SLIDINGWINDOW:4:30 MINLEN:35 TRAILING:3
 trimmomatic PE -phred33 SRR519926_1_R1.fastq SRR519926_1_R2.fastq trimmomatic_R1.fq trimmomatic_R2.fq SLIDINGWINDOW:4:30 MINLEN:35 TRAILING:3
+
+2020-01-16_3_S16_L002_R2_001.fastq
+
+PE -phred33 2020-01-16_3_S16_L002_R1_001.fastq1_001.fastq 2020-01-16_3_S16_L002_R1_001.fastq1_002.fastq 2020-01-16_3_S16_L002_R1_001.fastq_R1_paired.fq.gz 2020-01-16_3_S16_L002_R1_001.fastq1_unpaired.fq.gz 2020-01-16_3_S16_L002_R1_001.fastq_R2_paired.fq.gz 2020-01-16_3_S16_L002_R1_001.fastq2_unpaired.fq.gz LEADING:5 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 ILLUMINACLIP:TruSeq3-PE.fa:2:30:10:2:keepBothReads
+
+
+PE -phred33 2020-01-16_3_S16_L002_R2_001.fastq1_001.fastq 2020-01-16_3_S16_L002_R2_001.fastq1_002.fastq 2020-01-16_3_S16_L002_R2_001.fastq_R1_paired.fq.gz 2020-01-16_3_S16_L002_R2_001.fastq1_unpaired.fq.gz 2020-01-16_3_S16_L002_R2_001.fastq_R2_paired.fq.gz 2020-01-16_3_S16_L002_R2_001.fastq2_unpaired.fq.gz LEADING:5 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 ILLUMINACLIP:TruSeq3-PE.fa:2:30:10:2:keepBothReads
+
+
+
+
+
+
 
 #Run Trimmomatic across all files in a folder
 
 cd desktop/rnaseq/data
-for f in $(ls *.fastq.gz | sed 's/?_001.fastq.gz//' | sort -u)
+
+
+
+
+
+for file in ~/desktop/rnaseq/data/*_R1_001.fastq
 do
-trimmoomatic PE -phred33 ${f}1_001.fastq.gz ${f}1_002.fastq.gz  ${f}_R1_paired.fq.gz ${f}1_unpaired.fq.gz ${f}_R2_paired.fq.gz ${f}2_unpaired.fq.gz LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:35
+withpath="${file}"
+filename=${withpath##*/}
+base="${filename%*_*R1_001.fastq}"
+echo "${base}"
+java -jar ~/src/Trimmomatic-0.39/trimmomatic-0.39.jar PE -phred33 ~/desktop/rnaseq/data/"${base}"*_R1_001.fastq ~/desktop/rnaseq/data/"${base}"*_R2_001.fastq ~/desktop/rnaseq/results/trimmomatic/"${base}"_R1.trimmed_PE.fastq ~/desktop/rnaseq/results/trimmomatic/"${base}"_R1.unpaired.fastq ~/desktop/rnaseq/results/trimmomatic/"${base}"_R2.trimmed_PE.fastq ~/desktop/rnaseq/results/trimmomatic/"${base}"_R2.unpaired.fastq ILLUMINACLIP:TruSeq3-PE.fa:2:30:10:2:keepBothReads LEADING:5 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 
 done
-
-find /desktop/rnaseq/data/ -name ‘*paired.fq.gz' | xargs -I '{}' mv '{}' /desktop/rnaseq/data/trimmomatic
-
 
 
 #Fastqc Redo FASTQC on the trimmed samples 
-fastqc trimmed-*.fastq
+
+find ~/desktop/rnaseq/results/trimmomatic/ -name '*.fastq' | awk '{printf("fastqc \"%s\"\n", $0)}' | parallel -j 10 
+find ~/desktop/rnaseq/results/trimmomatic -name '*fastqc.*' | xargs -I '{}' mv '{}' ~/desktop/rnaseq/results/fastqc/trimmed
 
 
 
@@ -46,7 +70,7 @@ fastqc trimmed-*.fastq
 #combine a genome with the annotations that describe where the genes are; source: https://www.ncbi.nlm.nih.gov/assembly/GCF_000001635.27
 
 STAR --runThreadN {number of cores} --runMode genomeGenerate --genomeDir /path/to/resulting/STAR/genome/ --genomeFastaFiles /path/to/genome/fasta/file --sjdbGTFfile /path/to/GTF/or/GFF --sjdbOverhang {read length - 1}
-STAR --runThreadN 8 --runMode genomeGenerate --genomeDir /Desktop/rnaseq/genome/star/genome/ --genomeFastaFiles /Desktop/rnaseq/genome/*.fna --sjdbGTFfile /Desktop/rnaseq/genome/*.gff --sjdbOverhang 50
+STAR --runThreadN 8 --runMode genomeGenerate --genomeDir ~/Desktop/rnaseq/results/STAR/genome --genomeFastaFiles ~/Desktop/rnaseq/data/genome/GCF_000001635.27_GRCm39_genomic.fa --sjdbGTFfile ~/Desktop/rnaseq/data/genome/GCF_000001635.27_GRCm39_genomic.gff --sjdbOverhang 50
 
 
 
@@ -58,6 +82,8 @@ STAR --runThreadN 8 --runMode genomeGenerate --genomeDir /Desktop/rnaseq/genome/
 
 STAR --runMode alignReads --outSAMtype BAM Unsorted --readFilesCommand zcat --genomeDir /path/to/STAR/genome/folder --outFileNamePrefix {sample name}  --readFilesIn  /path/to/R1 /path/to/R2
 STAR --runMode alignReads --outSAMtype BAM Unsorted --readFilesCommand zcat --genomeDir /Desktop/rnaseq/genome/STAR/genome/ --outFileNamePrefix aligned  --readFilesIn  /desktop/rnaseq/data/trimmomatic/R1 /desktop/rnaseq/data/trimmomatic/R2
+
+
 
 #STAR on Multiple Reads
 cd desktop/rnaseq/results/trimmomatic
