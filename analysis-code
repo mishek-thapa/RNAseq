@@ -40,18 +40,17 @@ PE -phred33 2020-01-16_3_S16_L002_R2_001.fastq1_001.fastq 2020-01-16_3_S16_L002_
 
 cd desktop/rnaseq/data
 
+baseFilename=`basename $file .tex`
+
+for file in /media/circuit/Gustav/rnaseq/data/transcripts/singlelane/*_R1_001.fastq.gz; do withpath="${file}"; filename=${withpath##*/}; base=`basename $filename _R1_001.fastq.gz`; java -jar ~/src/Trimmomatic-0.39/trimmomatic-0.39.jar PE /media/circuit/Gustav/rnaseq/data/transcripts/singlelane/"${base}"*_R1_001.fastq.gz /media/circuit/Gustav/rnaseq/data/transcripts/singlelane/"${base}"*_R2_001.fastq.gz /media/circuit/Gustav/results/trimmomatic/singlelane/"${base}"_R1.trimmed_PE.fastq.gz /media/circuit/Gustav/rnaseq/results/trimmomatic/singlelane/"${base}"_R1.unpaired.fastq.gz /media/circuit/Gustav/rnaseq/results/trimmomatic/singlelane/"${base}"_R2.trimmed_PE.fastq.gz /media/circuit/Gustav/rnaseq/results/trimmomatic/singlelane/"${base}"_R2.unpaired.fastq.gz  ILLUMINACLIP:TruSeq3-PE.fa:2:30:10:2:keepBothReads LEADING:5 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36; done
 
 
+Easiest way is to use the auto_trim script here:https://github.com/lakhujanivijay/I-Shell-Do-This/blob/master/automation_of_trimmomatic/auto_trim.sh
+-make sure to edit the parameters and cd into the adapters
+
+~/src/Trimmomatic-0.39/adapters$ source ~/auto_trim.sh /media/circuit/Gustav/rnaseq/data/transcripts/flowcell/*.fastq.gz
 
 
-for file in ~/desktop/rnaseq/data/*_R1_001.fastq
-do
-withpath="${file}"
-filename=${withpath##*/}
-base="${filename%*_*R1_001.fastq}"
-echo "${base}"
-java -jar ~/src/Trimmomatic-0.39/trimmomatic-0.39.jar PE -phred33 ~/desktop/rnaseq/data/"${base}"*_R1_001.fastq ~/desktop/rnaseq/data/"${base}"*_R2_001.fastq ~/desktop/rnaseq/results/trimmomatic/"${base}"_R1.trimmed_PE.fastq ~/desktop/rnaseq/results/trimmomatic/"${base}"_R1.unpaired.fastq ~/desktop/rnaseq/results/trimmomatic/"${base}"_R2.trimmed_PE.fastq ~/desktop/rnaseq/results/trimmomatic/"${base}"_R2.unpaired.fastq ILLUMINACLIP:TruSeq3-PE.fa:2:30:10:2:keepBothReads LEADING:5 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 
-done
 
 
 #Fastqc Redo FASTQC on the trimmed samples 
@@ -86,12 +85,21 @@ STAR --runMode alignReads --outSAMtype BAM Unsorted --readFilesCommand zcat --ge
 
 
 #STAR on Multiple Reads
-cd desktop/rnaseq/results/trimmomatic
-for i in *paired_R1.fq.gz; do
-STAR --runMode alignReads --genomeLoad  LoadAndKeep --readFilesCommand zcat --outSAMtype BAM Unsorted --genomeDir /Desktop/rnaseq/genome/star/genome --readFilesIn $i ${i%_paired_R1.fq.gz}_R2.fq.gz --runThreadN 8 --outFileNamePrefix ${I%paired_R1.fq.gz}
-done
+
+
+for i in $(ls round1 | sed s/_R[12]_pair_001.fastq.gz// | sort -u); do STAR \
+--genomeLoad  LoadAndKeep \
+--readFilesCommand zcat \
+--outSAMtype BAM Unsorted \
+--genomeDir /media/circuit/Gustav/rnaseq/results/STAR/genome  \
+--readFilesIn round1/${i}_R1_pair_001.fastq.gz,round1/${i}_R2_pair_001.fastq.gz \
+--runThreadN 10 --outFileNamePrefix aligned/$i. \
+--quantMode GeneCounts; done
 
 
 
+
+
+ln -s /media/circuit/Gustav/rnaseq/results/STAR/data  ~/Downloads/RNAseq
 
 

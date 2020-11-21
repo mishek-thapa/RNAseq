@@ -1,3 +1,18 @@
+#Download Data from ddsclient
+
+
+ddsclient download -p Scalabrino_6426_200903B6 /media/circuit/Gustav/rnaseq/data/transcripts/
+
+ddsclient download -p Scalabrino_6426_200831B6  /media/circuit/Gustav/rnaseq/data/transcripts/flowcell
+
+
+
+
+
+
+
+
+
 #Installation of RNAseq Programs 
 
 # Quality control.
@@ -75,6 +90,9 @@ trimmomatic
 # here’s there source code that has to be compiled: https://github.com/alexdobin/STAR
 # I found it really annoying to install and had to mess around before I got it to work
 
+cd STAR/source
+make STAR
 
+ln -s ~/src/STAR/source/STAR ~/bin/STAR
 
 
