@@ -1,0 +1,91 @@
+---
+title: "countreads"
+output: pdf_document
+---
+
+
+```{r loadpackages}
+library(tidyverse)
+library(Rsamtools)
+library(Rsubread)
+library(GenomicFeatures)
+library(GenomicAlignments)
+```
+
+#Code for GeneCounts
+
+
+```{r}
+ff <- list.files( path = "rnaseq/results/trimmomatic/singlelane/aligned", pattern = "*ReadsPerGene.out.tab$", full.names = TRUE )
+counts.files <- lapply( ff, read.table, skip = 4 )
+counts <- as.data.frame( sapply( counts.files, function(x) x[ , 3 ] ) )
+ff <- gsub( "[.]ReadsPerGene[.]out[.]tab", "", ff )
+ff <- gsub( "[.]/counts/", "", ff )
+colnames(counts) <- ff
+row.names(counts) <- counts.files[[1]]$V1
+
+
+write.csv(counts, "singlelane.csv")
+```
+
+```{r}
+ff <- list.files( path = "rnaseq/results/trimmomatic/flowcell/aligned", pattern = "*ReadsPerGene.out.tab$", full.names = TRUE )
+counts.files <- lapply( ff, read.table, skip = 4 )
+counts <- as.data.frame( sapply( counts.files, function(x) x[ , 3 ] ) )
+ff <- gsub( "[.]ReadsPerGene[.]out[.]tab", "", ff )
+ff <- gsub( "[.]/counts/", "", ff )
+colnames(counts) <- ff
+row.names(counts) <- counts.files[[1]]$V1
+
+
+write.csv(counts, "flowcell.csv")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Code for SummarizeOverlaps
+
+```{#r}
+#I've made a symbolic link to the data in Gustav in the rnaseq folder
+
+#make a list of Bam files
+singlelane_files <- list.files("rnaseq/results/trimmomatic/singlelane/aligned/", pattern = "\\.bam$" ,
+           full.names = TRUE)
+bamfiles <- BamFileList(singlelane_files, yieldSize=7000000)
+
+
+#make a database for the transcripts
+gtffile = "~/Downloads/RNAseq/rnaseq/data/genome/Mus_musculus.GRCm38.101.gtf"
+(txdb <- makeTxDbFromGFF(gtffile, format="gtf"))
+(genes <- exonsBy(txdb, by="gene"))
+```
+
+#Gene Quantification
+
+```{#r}
+se <- summarizeOverlaps(features=genes, reads=bamfiles,
+                        mode="Union",
+                        singleEnd=FALSE,
+                        ignore.strand=TRUE,
+                        fragments=FALSE )
+colSums(assay(se))
+```
+
+
