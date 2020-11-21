@@ -69,7 +69,16 @@ find ~/desktop/rnaseq/results/trimmomatic -name '*fastqc.*' | xargs -I '{}' mv '
 #combine a genome with the annotations that describe where the genes are; source: https://www.ncbi.nlm.nih.gov/assembly/GCF_000001635.27
 
 STAR --runThreadN {number of cores} --runMode genomeGenerate --genomeDir /path/to/resulting/STAR/genome/ --genomeFastaFiles /path/to/genome/fasta/file --sjdbGTFfile /path/to/GTF/or/GFF --sjdbOverhang {read length - 1}
-STAR --runThreadN 8 --runMode genomeGenerate --genomeDir ~/Desktop/rnaseq/results/STAR/genome --genomeFastaFiles ~/Desktop/rnaseq/data/genome/GCF_000001635.27_GRCm39_genomic.fa --sjdbGTFfile ~/Desktop/rnaseq/data/genome/GCF_000001635.27_GRCm39_genomic.gff --sjdbOverhang 50
+
+
+/media/circuit/Gustav/rnaseq/results/STAR/genome
+/media/circuit/Gustav/rnaseq/data/genome/Mus_musculus.GRCm38.dna.primary_assembly.fa
+/media/circuit/Gustav/rnaseq/data/genome/Mus_musculus.GRCm38.101.gtf
+
+
+
+
+STAR --runThreadN 15 --runMode genomeGenerate --genomeDir /media/circuit/Gustav/rnaseq/results/STAR/genome --genomeFastaFiles /media/circuit/Gustav/rnaseq/data/genome/Mus_musculus.GRCm38.dna.primary_assembly.fa --sjdbGTFfile /media/circuit/Gustav/rnaseq/data/genome/Mus_musculus.GRCm38.101.gtf --sjdbOverhang 50
 
 
 
