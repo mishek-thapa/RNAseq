@@ -1,0 +1,506 @@
+---
+title: "differential_expression"
+output: pdf_document
+---
+```{r}
+library(tidyverse)
+library(DESeq2)
+library(gplots)
+library(RColorBrewer)
+library( "genefilter" )
+```
+
+```{r}
+flowcell <- read_csv("flowcell.csv")
+singlelane <- read_csv("singlelane.csv")
+samples <- read_csv("samples.csv")
+```
+
+#datawrangling
+```{r}
+samples$Sample <- gsub(".*_","",samples$Sample)
+
+samples <- samples %>%
+  filter(!is.na(Sample)) %>%
+  mutate(sac_age = Group, 
+         tx_age = case_when(
+           grepl("/", Group) ~ Group
+         )) %>%
+  separate(tx_age, sep = "/", into = c("tx_age", "death")) %>%
+  separate(Genotype, c("CNGB", "Rescue"), sep = 2) %>%
+  mutate(CNGB = case_when(
+    grepl("N", CNGB) ~ "Normal",
+    TRUE ~ "Mutant"),
+    tx = case_when(
+      is.na(tx_age) ~ FALSE,
+      !is.na(tx_age)~ TRUE)) %>%
+  select(-c(death, Group, Rescue))
+
+samples$sac_age <- gsub(".*/","",samples$sac_age)
+
+
+samples
+```
+
+
+```{r}
+colnames(singlelane) <-c("gene", paste(gsub("_.*","", paste("S",gsub(".*S", "",colnames(singlelane)[-1]), sep = "")), "_L003", sep = ""))
+samples_single <- samples %>%
+  mutate(samplename = paste(Sample, "_L003", sep = ""),
+         tech = "singlelane")
+
+
+colnames(flowcell) <- c("gene_id", paste("S", gsub(".*S", "",colnames(flowcell)[-1]), sep = ""))
+
+
+counts <- bind_cols(flowcell, singlelane[-1])
+
+samples_flow1 <- samples %>%
+  mutate(samplename = paste(Sample, "_L001", sep = ""),
+         tech = "flowcell1")
+samples_flow2 <- samples %>%
+  mutate(samplename = paste(Sample, "_L002", sep = ""),
+         tech = "flowcell2")
+
+
+allsamples <- bind_rows(samples_flow1, samples_flow2, samples_single)
+
+
+missing <- allsamples %>%
+  arrange((Sample)) %>%
+  filter(!(samplename %in% colnames(counts)))
+
+write.csv(missing, "missing.csv")
+  
+```
+
+
+# WT vs KO Comparison
+
+```{r}
+#selects the samples we are going to analyze
+mysamples <- allsamples %>%
+  filter(tx == FALSE) %>%
+  filter( (CNGB == "Normal" & sac_age == "P30") |(CNGB == "Mutant" & sac_age == "P210"))
+
+#finds the samples we have counted from
+mycounts <- counts %>%
+  select(gene_id, starts_with(mysamples$samplename)) 
+
+
+#make a matrix for deseq2
+mymatrix <- as.matrix(mycounts[-1])
+rownames(mymatrix) <- mycounts$gene_id
+
+
+#specify samples that are in this comparison group
+mysamples <- mysamples %>%
+  filter(samplename %in% colnames(mycounts))
+
+```
+
+```{r}
+#creates the deseq object
+ddsMat <- DESeqDataSetFromMatrix(countData = mymatrix,
+                                 colData = mysamples,
+                                 design = ~ CNGB)
+
+#specify reference level
+ddsMat$CNGB <- relevel(ddsMat$CNGB, ref = "Normal")
+```
+
+
+```{r}
+#check if sample infomatched with counts
+as.data.frame( colData( ddsMat )[ ,c("Sample","tech") ] )
+
+#collapse replicates based on the sample
+ddsCollapsed <- collapseReplicates( ddsMat,
+                                    groupby = ddsMat$Sample,
+                                    run = ddsMat$tech )
+head( as.data.frame( colData(ddsCollapsed)[ ,c("Sample","runsCollapsed") ] ), 12 )
+
+#test if collapsing worked
+
+original <- rowSums( counts(ddsMat)[,ddsMat$Sample == "S18"] )
+all( original == counts(ddsCollapsed)[ ,"S18" ] )
+
+```
+
+
+```{r}
+dds <- DESeq(ddsCollapsed)
+res <- results(dds)
+diffexp <- as.data.frame(res[!is.na(res$padj) & res$padj < 0.1 & abs(res$log2FoldChange) > log2(1.5),]) %>%
+  arrange((padj))
+write.csv(diffexp, file="cngb1_results.csv")
+
+write.csv(res, "all_cngbresults.csv")
+
+mcols(res, use.names=TRUE)
+plotMA( res, ylim = c(-4, 4) )
+hist( res$pvalue, breaks=20, col="grey" )
+rld <- rlog( dds )
+```
+
+
+```{r}
+par( mfrow = c( 1, 2 ) )
+plot( log2( 1+counts(dds, normalized=TRUE)[, 1:2] ), col="#00000020", pch=20, cex=0.3 )
+plot( assay(rld)[, 1:2], col="#00000020", pch=20, cex=0.3 )
+```
+
+
+```{r fig.width=3}
+#Find Distances between samples
+sampleDists <- dist( t( assay(rld) ) )
+
+sampleDistMatrix <- as.matrix( sampleDists )
+rownames(sampleDistMatrix) <-rld$Sample
+colnames(sampleDistMatrix) <- NULL
+library( "gplots" )
+library( "RColorBrewer" )
+colours = colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+heatmap.2( sampleDistMatrix, trace="none", col=colours)
+```
+
+
+```{r PCA,message=FALSE, warning=FALSE}
+print( plotPCA( rld, intgroup = c( "Sample", "CNGB")), cols = cols )
+
+topVarGenes <- head( order( rowVars( assay(rld) ), decreasing=TRUE ), 50 )
+
+heatmap.2( assay(rld)[ topVarGenes, ], scale="row",
+trace="none", dendrogram="column",
+col = colorRampPalette( rev(brewer.pal(9, "RdBu")) )(255))
+```
+
+
+
+
+
+# WT Tamoxifin Fed vs Tamoxifin Fed Mutant Comparison
+
+```{r}
+#selects the samples we are going to analyze
+mysamples <- allsamples %>%
+  #filter(tx == FALSE) %>%
+  filter( (CNGB == "Normal" & sac_age == "P150" & tx_age == "P30") |(CNGB == "Mutant" & sac_age == "P150" & tx_age == "P30"))
+
+#finds the samples we have counted from
+mycounts <- counts %>%
+  select(gene_id, starts_with(mysamples$samplename)) 
+
+
+#make a matrix for deseq2
+mymatrix <- as.matrix(mycounts[-1])
+rownames(mymatrix) <- mycounts$gene_id
+
+
+#specify samples that are in this comparison group
+mysamples <- mysamples %>%
+  filter(samplename %in% colnames(mycounts))
+
+```
+
+```{r}
+#creates the deseq object
+ddsMat <- DESeqDataSetFromMatrix(countData = mymatrix,
+                                 colData = mysamples,
+                                 design = ~ CNGB)
+
+#specify reference level
+ddsMat$CNGB <- relevel(ddsMat$CNGB, ref = "Normal")
+```
+
+
+```{r}
+#check if sample infomatched with counts
+as.data.frame( colData( ddsMat )[ ,c("Sample","tech") ] )
+
+#collapse replicates based on the sample
+ddsCollapsed <- collapseReplicates( ddsMat,
+                                    groupby = ddsMat$Sample,
+                                    run = ddsMat$tech )
+head( as.data.frame( colData(ddsCollapsed)[ ,c("Sample","runsCollapsed") ] ), 12 )
+
+```
+
+
+```{r}
+dds <- DESeq(ddsCollapsed)
+res <- results(dds)
+
+write.csv(as.data.frame(res[!is.na(res$padj) & res$padj < 0.1 & abs(res$log2FoldChange) > log2(1.5),]), file="cngb_results.csv")
+
+write.csv(res, "all_cngbresults.csv")
+
+mcols(res, use.names=TRUE)
+plotMA( res, ylim = c(-4, 4) )
+hist( res$pvalue, breaks=20, col="grey" )
+rld <- rlog( dds )
+ 
+```
+
+
+```{r}
+par( mfrow = c( 1, 2 ) )
+plot( log2( 1+counts(dds, normalized=TRUE)[, 1:2] ), col="#00000020", pch=20, cex=0.3 )
+plot( assay(rld)[, 1:2], col="#00000020", pch=20, cex=0.3 )
+```
+
+
+```{r fig.width=3}
+#Find Distances between samples
+sampleDists <- dist( t( assay(rld) ) )
+
+sampleDistMatrix <- as.matrix( sampleDists )
+rownames(sampleDistMatrix) <-rld$Sample
+colnames(sampleDistMatrix) <- NULL
+library( "gplots" )
+library( "RColorBrewer" )
+colours = colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+heatmap.2( sampleDistMatrix, trace="none", col=colours)
+```
+
+
+```{r PCA,message=FALSE, warning=FALSE}
+print( plotPCA( rld, intgroup = c( "Sample", "CNGB")), cols = cols )
+
+topVarGenes <- head( order( rowVars( assay(rld) ), decreasing=TRUE ), 50 )
+
+heatmap.2( assay(rld)[ topVarGenes, ], scale="row",
+trace="none", dendrogram="column",
+col = colorRampPalette( rev(brewer.pal(9, "RdBu")) )(255))
+```
+
+
+
+
+
+# WT Tamoxifin Fed Mutant vs Unfed Mutant Comparison
+
+```{r}
+#selects the samples we are going to analyze
+mysamples <- allsamples %>%
+  #filter(tx == FALSE) %>%
+  filter( (CNGB == "Mutant" & sac_age == "P90") |(CNGB == "Mutant" & sac_age == "P150" & tx_age == "P90"))
+
+#finds the samples we have counted from
+mycounts <- counts %>%
+  select(gene_id, starts_with(mysamples$samplename)) 
+
+
+#make a matrix for deseq2
+mymatrix <- as.matrix(mycounts[-1])
+rownames(mymatrix) <- mycounts$gene_id
+
+
+#specify samples that are in this comparison group
+mysamples <- mysamples %>%
+  filter(samplename %in% colnames(mycounts))
+
+```
+
+```{r}
+#creates the deseq object
+ddsMat <- DESeqDataSetFromMatrix(countData = mymatrix,
+                                 colData = mysamples,
+                                 design = ~ tx)
+
+#specify reference level
+#ddsMat$CNGB <- relevel(ddsMat$CNGB, ref = FALSE)
+```
+
+
+```{r}
+#check if sample infomatched with counts
+as.data.frame( colData( ddsMat )[ ,c("Sample","tech") ] )
+
+#collapse replicates based on the sample
+ddsCollapsed <- collapseReplicates( ddsMat,
+                                    groupby = ddsMat$Sample,
+                                    run = ddsMat$tech )
+head( as.data.frame( colData(ddsCollapsed)[ ,c("Sample","runsCollapsed") ] ), 12 )
+
+```
+
+```{r}
+dds <- DESeq(ddsCollapsed)
+res <- results(dds)
+
+write.csv(as.data.frame(res[!is.na(res$padj) & res$padj < 0.1 & abs(res$log2FoldChange) > log2(1.5),]), file="cngb_results.csv")
+
+write.csv(res, "all_cngbresults.csv")
+
+mcols(res, use.names=TRUE)
+plotMA( res, ylim = c(-4, 4) )
+hist( res$pvalue, breaks=20, col="grey" )
+rld <- rlog( dds )
+ 
+```
+
+
+```{r}
+par( mfrow = c( 1, 2 ) )
+plot( log2( 1+counts(dds, normalized=TRUE)[, 1:2] ), col="#00000020", pch=20, cex=0.3 )
+plot( assay(rld)[, 1:2], col="#00000020", pch=20, cex=0.3 )
+```
+
+
+```{r fig.width=3}
+#Find Distances between samples
+sampleDists <- dist( t( assay(rld) ) )
+
+sampleDistMatrix <- as.matrix( sampleDists )
+rownames(sampleDistMatrix) <-rld$Sample
+colnames(sampleDistMatrix) <- NULL
+library( "gplots" )
+library( "RColorBrewer" )
+colours = colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+heatmap.2( sampleDistMatrix, trace="none", col=colours)
+```
+
+
+```{r PCA,message=FALSE, warning=FALSE}
+print( plotPCA( rld, intgroup = c( "Sample", "tx")), cols = cols )
+
+topVarGenes <- head( order( rowVars( assay(rld) ), decreasing=TRUE ), 50 )
+
+heatmap.2( assay(rld)[ topVarGenes, ], scale="row",
+trace="none", dendrogram="column",
+col = colorRampPalette( rev(brewer.pal(9, "RdBu")) )(255))
+```
+
+
+
+
+# Early Stage Mutant vs Late Stage
+
+```{r}
+#selects the samples we are going to analyze
+mysamples <- allsamples %>%
+  filter(tx == FALSE) %>%
+  filter( (CNGB == "Mutant" & sac_age == "P30") |(CNGB == "Mutant" & sac_age == "P210"))
+
+#finds the samples we have counted from
+mycounts <- counts %>%
+  select(gene_id, starts_with(mysamples$samplename)) 
+
+
+#make a matrix for deseq2
+mymatrix <- as.matrix(mycounts[-1])
+rownames(mymatrix) <- mycounts$gene_id
+
+
+#specify samples that are in this comparison group
+mysamples <- mysamples %>%
+  filter(samplename %in% colnames(mycounts))
+
+```
+
+```{r}
+#creates the deseq object
+ddsMat <- DESeqDataSetFromMatrix(countData = mymatrix,
+                                 colData = mysamples,
+                                 design = ~ sac_age)
+
+#specify reference level
+#ddsMat$CNGB <- relevel(ddsMat$CNGB, ref = FALSE)
+```
+
+
+```{r}
+#check if sample infomatched with counts
+as.data.frame( colData( ddsMat )[ ,c("Sample","tech") ] )
+
+#collapse replicates based on the sample
+ddsCollapsed <- collapseReplicates( ddsMat,
+                                    groupby = ddsMat$Sample,
+                                    run = ddsMat$tech )
+head( as.data.frame( colData(ddsCollapsed)[ ,c("Sample","runsCollapsed") ] ), 12 )
+
+```
+
+```{r}
+dds <- DESeq(ddsCollapsed)
+res <- results(dds)
+
+write.csv(as.data.frame(res[!is.na(res$padj) & res$padj < 0.1 & abs(res$log2FoldChange) > log2(1.5),]), file="cngb_results.csv")
+
+write.csv(res, "all_cngbresults.csv")
+
+mcols(res, use.names=TRUE)
+plotMA( res, ylim = c(-4, 4) )
+hist( res$pvalue, breaks=20, col="grey" )
+rld <- rlog( dds )
+ 
+```
+
+
+```{r}
+par( mfrow = c( 1, 2 ) )
+plot( log2( 1+counts(dds, normalized=TRUE)[, 1:2] ), col="#00000020", pch=20, cex=0.3 )
+plot( assay(rld)[, 1:2], col="#00000020", pch=20, cex=0.3 )
+```
+
+
+```{r fig.width=3}
+#Find Distances between samples
+sampleDists <- dist( t( assay(rld) ) )
+
+sampleDistMatrix <- as.matrix( sampleDists )
+rownames(sampleDistMatrix) <-rld$Sample
+colnames(sampleDistMatrix) <- NULL
+library( "gplots" )
+library( "RColorBrewer" )
+colours = colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+heatmap.2( sampleDistMatrix, trace="none", col=colours)
+```
+
+
+```{r PCA,message=FALSE, warning=FALSE}
+print( plotPCA( rld, intgroup = c( "Sample", "sac_age")), cols = cols )
+
+topVarGenes <- head( order( rowVars( assay(rld) ), decreasing=TRUE ), 50 )
+
+heatmap.2( assay(rld)[ topVarGenes, ], scale="row",
+trace="none", dendrogram="column",
+col = colorRampPalette( rev(brewer.pal(9, "RdBu")) )(255))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{#r save the samples}
+#some samples have not gotten mapped and still need to 
+allsamples <- allsamples %>%
+  filter(samplename %in% colnames(counts)[-1])
+
+allsamples <- as.matrix(allsamples)
+allcounts <- as.matrix(counts[-1])
+
+
+allsamples <- allsamples %>%
+  arrange(factor(samplename, levels = colnames(allcounts)))
+
+
+
+rownames(allcounts) <- counts$gene
+
+write.csv(counts, "allcounts.csv", row.names = FALSE)
+write.csv(allsamples, "allsamples.csv", row.names = FALSE)
+```
+
+
+

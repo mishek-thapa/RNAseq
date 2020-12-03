@@ -1,0 +1,62 @@
+---
+title: "ideal"
+output: pdf_document
+---
+
+
+```{r}
+library(tidyverse)
+library(org.Mm.eg.db)
+library(clusterProfiler)
+library("AnnotationDbi")
+```
+
+```{r}
+
+biological_process <- function(results_file = "cngb_results.csv") {
+  data <- read_csv(results_file)
+  
+  bpcs <- read_csv("all_cngbresults.csv")
+  colnames(data)[1] <- "gene_id"
+  colnames(bpcs)[1] <- "gene_id"
+  
+  sigOE_genes <- as.character(data$gene_id)
+  allOE_genes <- as.character(bpcs$gene_id)
+  
+  ## Run GO enrichment analysis 
+  ego <- enrichGO(gene = sigOE_genes, 
+                  universe = allOE_genes,
+                  keyType = "ENSEMBL",
+                  OrgDb = org.Mm.eg.db, 
+                  ont = "BP", 
+                  pAdjustMethod = "BH", 
+                  qvalueCutoff = 0.1, 
+                  readable = TRUE)
+  ego
+}
+ego <- biological_process()
+```
+
+
+
+```{r}
+cluster_summary <- data.frame(ego)
+
+write.csv(cluster_summary,"cngb_bp.csv")
+
+dotplot(ego, showCategory=10, label_format = 10, x = "Count", font.size = 10)
+```
+
+
+
+```{r}
+results_file = "cngb1_results.csv"
+
+all_genes <- read_csv(results_file) %>%
+  arrange(desc(pvalue))
+
+write.csv(all_genes,"mutant_vs_ct.csv")
+```
+
+
+

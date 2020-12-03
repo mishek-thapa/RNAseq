@@ -43,23 +43,6 @@ write.csv(counts, "flowcell.csv")
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #Code for SummarizeOverlaps
 
 ```{#r}
