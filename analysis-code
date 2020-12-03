@@ -95,6 +95,7 @@ STAR --runMode alignReads --outSAMtype BAM Unsorted --readFilesCommand zcat --ge
 
 #STAR on Multiple Reads
 
+cd /media/circuit/Gustav/rnaseq/trimmomatic/singlelane
 
 for i in $(ls round1 | sed s/_R[12]_pair_001.fastq.gz// | sort -u); do STAR \
 --genomeLoad  LoadAndKeep \
